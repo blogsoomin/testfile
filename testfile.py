@@ -11,7 +11,6 @@ def multiply(a, b):
     
 def divide(a, b):  
     return a/b
-=======
+
 def multiply(a,b);
   return a*b
->>>>>>> cbb7fff71311f48a6d35d5ac97c04791c6119b46
