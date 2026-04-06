@@ -175,19 +175,18 @@ def _send_via_power_automate(webhook_url: str, notices: list[dict], title_prefix
     lines = []
     for n in notices:
         date_str = f"[{n['date']}] " if n["date"] else ""
-        if n["link"]:
-            lines.append(f"• {date_str}<a href='{n['link']}'>{n['title']}</a>")
-        else:
-            lines.append(f"• {date_str}{n['title']}")
+        link_text = f"{n['title']} ({n['link']})" if n["link"] else n["title"]
+        lines.append(f"• {date_str}{link_text}")
 
-    body = (
-        f"<h3>📢 NIPA 사업공고 {title_prefix} {len(notices)}건</h3>"
-        f"<p>{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>"
-        + "<br>".join(lines)
-        + f"<br><br><a href='https://www.nipa.kr/'>NIPA 사업공고 바로가기 →</a>"
+    text = (
+        f"📢 NIPA 사업공고 {title_prefix} {len(notices)}건\n"
+        f"{datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+        + "\n".join(lines)
+        + "\n\nhttps://www.nipa.kr/"
     )
 
-    payload = {"text": body}
+    # Power Automate "채널에 웹후크 알림 보내기" 템플릿 형식
+    payload = {"text": text}
 
     try:
         resp = requests.post(webhook_url, json=payload, timeout=10)
