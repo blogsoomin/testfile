@@ -154,6 +154,9 @@ def fetch_all_pages(site: dict, headers: dict, timeout: int, retries: int, delay
 
         notices = parse_notices(soup, selectors, base_url, site_cfg=site)
         if not notices:
+            # 디버그: 실제 받은 HTML 일부 출력
+            body_text = soup.get_text()[:300].replace("\n", " ").strip()
+            log.warning(f"  셀렉터 불일치. 페이지 내용 미리보기: {body_text}")
             log.info(f"  페이지 {page_num} 공고 없음 — 마지막 페이지로 판단")
             break
 
