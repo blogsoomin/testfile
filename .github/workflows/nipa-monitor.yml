@@ -71,9 +71,9 @@ jobs:
                 "detail_url": "https://www.kiat.or.kr/front/board/boardContentsView.do?board_id=90&contents_id=",
                 "selectors": {
                   "item": "table tbody tr",
-                  "title": "td a",
+                  "title": "td.td_title a",
                   "link_attr": "href",
-                  "date": "td.date"
+                  "date": "td.td_app_term"
                 }
               }
             ]
