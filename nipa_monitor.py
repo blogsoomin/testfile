@@ -114,10 +114,16 @@ def make_id(title: str, link: str) -> str:
 
 
 # ── 크롤링 ────────────────────────────────────────────────────────────────────
-def fetch_page(url: str, headers: dict, timeout: int, retries: int, delay: int) -> BeautifulSoup | None:
+def fetch_page(url: str, headers: dict, timeout: int, retries: int, delay: int,
+               method: str = "GET", post_data: dict | None = None,
+               session: requests.Session | None = None) -> BeautifulSoup | None:
+    requester = session or requests
     for attempt in range(1, retries + 1):
         try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
+            if method.upper() == "POST":
+                resp = requester.post(url, data=post_data, headers=headers, timeout=timeout)
+            else:
+                resp = requester.get(url, headers=headers, timeout=timeout)
             resp.raise_for_status()
             resp.encoding = resp.apparent_encoding or "utf-8"
             return BeautifulSoup(resp.text, "html.parser")
@@ -132,41 +138,58 @@ def fetch_all_pages(site: dict, headers: dict, timeout: int, retries: int, delay
     """여러 페이지 순차 탐색 → 전체 공고 목록 반환"""
     base_url    = site["url"]
     selectors   = site["selectors"]
-    page_param  = site.get("page_param")          # 예: "pageIndex", "pageNo"
-    page_start  = site.get("page_start", 1)       # 첫 페이지 번호 (보통 1)
-    max_pages   = site.get("max_pages", 1)        # 탐색할 최대 페이지 수
+    page_param  = site.get("page_param")
+    page_start  = site.get("page_start", 1)
+    max_pages   = site.get("max_pages", 1)
+
+    # AJAX POST 사이트: 세션 유지를 위해 먼저 메인 페이지 GET
+    sess = requests.Session()
+    sess.headers.update(headers)
+    ajax_url  = site.get("ajax_url")
+    post_data = dict(site.get("post_data", {}))
+    method    = "POST" if ajax_url else "GET"
+    fetch_url = ajax_url or base_url
+
+    if ajax_url:
+        log.info(f"  세션 초기화: {base_url}")
+        sess.get(base_url, timeout=timeout)  # 세션 쿠키 획득
+        time.sleep(0.5)
 
     all_notices: list[dict] = []
     seen_ids: set[str] = set()
 
     for page_num in range(page_start, page_start + max_pages):
-        if page_param and page_num > page_start:
-            sep = "&" if "?" in base_url else "?"
-            url = f"{base_url}{sep}{page_param}={page_num}"
+        if page_param:
+            if ajax_url:
+                post_data[page_param] = str(page_num)
+                url = fetch_url
+            else:
+                sep = "&" if "?" in base_url else "?"
+                url = f"{base_url}{sep}{page_param}={page_num}" if page_num > page_start else base_url
         else:
-            url = base_url
+            url = fetch_url
 
         log.info(f"  페이지 {page_num} 크롤링: {url}")
-        soup = fetch_page(url, headers, timeout, retries, delay)
+        soup = fetch_page(url, headers, timeout, retries, delay,
+                          method=method, post_data=post_data if ajax_url else None,
+                          session=sess)
         if soup is None:
             log.warning(f"  페이지 {page_num} 로드 실패 — 중단")
             break
 
         notices = parse_notices(soup, selectors, base_url, site_cfg=site)
         if not notices:
-            # 디버그: 실제 받은 HTML 일부 출력
             body_text = soup.get_text()[:300].replace("\n", " ").strip()
             log.warning(f"  셀렉터 불일치. 페이지 내용 미리보기: {body_text}")
             log.info(f"  페이지 {page_num} 공고 없음 — 마지막 페이지로 판단")
             break
 
-        # 중복 제거 (페이지 경계에서 같은 공고가 중복될 수 있음)
         new = [n for n in notices if n["id"] not in seen_ids]
         if not new:
             break
         seen_ids.update(n["id"] for n in new)
         all_notices.extend(new)
-        time.sleep(0.5)  # 서버 부하 방지
+        time.sleep(0.5)
 
     return all_notices
 

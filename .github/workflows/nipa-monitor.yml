@@ -75,6 +75,11 @@ jobs:
               {
                 "name": "KIAT",
                 "url": "https://www.kiat.or.kr/front/board/boardContentsListPage.do?board_id=90&MenuId=b159c9dac684471b87256f1e25404f5e",
+                "ajax_url": "https://www.kiat.or.kr/front/board/boardContentsListAjax.do",
+                "post_data": {
+                  "board_id": "90",
+                  "MenuId": "b159c9dac684471b87256f1e25404f5e"
+                },
                 "detail_url": "https://www.kiat.or.kr/front/board/boardContentsView.do?board_id=90&contents_id=",
                 "page_param": "pageNo",
                 "page_start": 1,
