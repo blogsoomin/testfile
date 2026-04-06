@@ -128,6 +128,46 @@ def fetch_page(url: str, headers: dict, timeout: int, retries: int, delay: int) 
     return None
 
 
+def fetch_all_pages(site: dict, headers: dict, timeout: int, retries: int, delay: int) -> list[dict]:
+    """여러 페이지 순차 탐색 → 전체 공고 목록 반환"""
+    base_url    = site["url"]
+    selectors   = site["selectors"]
+    page_param  = site.get("page_param")          # 예: "pageIndex", "pageNo"
+    page_start  = site.get("page_start", 1)       # 첫 페이지 번호 (보통 1)
+    max_pages   = site.get("max_pages", 1)        # 탐색할 최대 페이지 수
+
+    all_notices: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for page_num in range(page_start, page_start + max_pages):
+        if page_param and page_num > page_start:
+            sep = "&" if "?" in base_url else "?"
+            url = f"{base_url}{sep}{page_param}={page_num}"
+        else:
+            url = base_url
+
+        log.info(f"  페이지 {page_num} 크롤링: {url}")
+        soup = fetch_page(url, headers, timeout, retries, delay)
+        if soup is None:
+            log.warning(f"  페이지 {page_num} 로드 실패 — 중단")
+            break
+
+        notices = parse_notices(soup, selectors, base_url, site_cfg=site)
+        if not notices:
+            log.info(f"  페이지 {page_num} 공고 없음 — 마지막 페이지로 판단")
+            break
+
+        # 중복 제거 (페이지 경계에서 같은 공고가 중복될 수 있음)
+        new = [n for n in notices if n["id"] not in seen_ids]
+        if not new:
+            break
+        seen_ids.update(n["id"] for n in new)
+        all_notices.extend(new)
+        time.sleep(0.5)  # 서버 부하 방지
+
+    return all_notices
+
+
 def resolve_href(href: str, base_url: str, site_cfg: dict) -> str:
     """javascript:contentsView('ID') 형태 링크를 실제 URL로 변환"""
     import re
@@ -169,10 +209,10 @@ def matches_keywords(title: str, keywords: list[str]) -> bool:
 
 
 def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = False,
-                       keywords: list[str] | None = None) -> bool:
+                       keywords: list[str] | None = None, keywords_only: bool = False) -> bool:
     """
     results: [{"site": "NIPA", "notices": [...]}, ...]
-    키워드 매칭 공고를 최상단에 표시
+    keywords_only=True → 키워드 매칭 공고만 전송, 전체 목록 생략
     """
     total = sum(len(r["notices"]) for r in results)
     if total == 0:
@@ -180,37 +220,42 @@ def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = F
         return True
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    prefix = "현재 공고 전체" if send_all else "신규 공고"
     keywords = keywords or []
 
-    lines = [f"({total}건) {now}\n"]
+    lines = []
 
-    # ── 키워드 매칭 공고 최상단 표시 ─────────────────────────────────────────
-    if keywords:
-        matched = [
-            (r["site"], n)
-            for r in results
-            for n in r["notices"]
-            if matches_keywords(n["title"], keywords)
-        ]
-        if matched:
-            kw_str = ", ".join(keywords)
-            lines.append(f"🔥 관련 공고 ({kw_str}) — {len(matched)}건")
-            for i, (site, n) in enumerate(matched, 1):
-                date_str = n["date"] or "-"
-                lines.append(f"  {i}. [{site}] [{date_str}] {n['title']}")
-            lines.append("")
+    # ── 키워드 매칭 공고 ──────────────────────────────────────────────────────
+    matched = [
+        (r["site"], n)
+        for r in results
+        for n in r["notices"]
+        if keywords and matches_keywords(n["title"], keywords)
+    ]
 
-    # ── 사이트별 전체 목록 ────────────────────────────────────────────────────
-    lines.append("📋 전체 목록")
-    for r in results:
-        if not r["notices"]:
-            continue
-        lines.append(f"▶ {r['site']} {len(r['notices'])}건")
-        for i, n in enumerate(r["notices"], 1):
+    if matched:
+        kw_str = ", ".join(keywords)
+        lines.append(f"🔥 관련 공고 ({kw_str}) — {len(matched)}건")
+        for i, (site, n) in enumerate(matched, 1):
             date_str = n["date"] or "-"
-            lines.append(f"  {i}. [{date_str}] {n['title']}")
+            lines.append(f"  {i}. [{site}] [{date_str}] {n['title']}")
         lines.append("")
+    elif keywords_only:
+        log.info("키워드 매칭 공고 없음.")
+        return True
+
+    # ── 전체 목록 (keywords_only 모드에서는 생략) ─────────────────────────────
+    if not keywords_only:
+        lines.append(f"📋 전체 목록 ({total}건) {now}")
+        for r in results:
+            if not r["notices"]:
+                continue
+            lines.append(f"▶ {r['site']} {len(r['notices'])}건")
+            for i, n in enumerate(r["notices"], 1):
+                date_str = n["date"] or "-"
+                lines.append(f"  {i}. [{date_str}] {n['title']}")
+            lines.append("")
+    else:
+        lines.insert(0, f"({len(matched)}건) {now}\n")
 
     payload = {"text": "\n".join(lines).strip()}
 
@@ -253,27 +298,23 @@ def main():
         log.error("config.json의 teams_webhook_url을 실제 URL로 교체하세요.")
         return
 
-    send_all   = config.get("send_all", False)
-    keywords   = config.get("keywords", [])
-    state      = load_state()
-    is_first   = len(state) == 0
-    headers    = config["headers"]
-    timeout    = config["timeout"]
-    retries    = config["max_retries"]
-    delay      = config["retry_delay"]
+    send_all      = config.get("send_all", False)
+    keywords_only = config.get("keywords_only", False)
+    keywords      = config.get("keywords", [])
+    state         = load_state()
+    is_first      = len(state) == 0
+    headers       = config["headers"]
+    timeout       = config["timeout"]
+    retries       = config["max_retries"]
+    delay         = config["retry_delay"]
 
     results = []
 
     for site in config["sites"]:
         name = site["name"]
-        log.info(f"[{name}] 크롤링 중...")
+        log.info(f"[{name}] 크롤링 중... (최대 {site.get('max_pages', 1)}페이지)")
 
-        soup = fetch_page(site["url"], headers, timeout, retries, delay)
-        if soup is None:
-            log.error(f"[{name}] 페이지 크롤링 실패")
-            continue
-
-        all_notices = parse_notices(soup, site["selectors"], site["url"], site_cfg=site)
+        all_notices = fetch_all_pages(site, headers, timeout, retries, delay)
         if not all_notices:
             log.warning(f"[{name}] 공고 파싱 실패 — selectors 확인 필요")
             continue
@@ -281,10 +322,9 @@ def main():
         log.info(f"[{name}] 파싱된 공고 수: {len(all_notices)}")
         site_seen = state.get(name, set())
 
-        if send_all:
+        if send_all or keywords_only:
             target = all_notices
         elif is_first or not site_seen:
-            # 첫 실행: 기준점만 저장
             state[name] = {n["id"] for n in all_notices}
             log.info(f"[{name}] 첫 실행 — 기준점 저장")
             continue
@@ -293,17 +333,20 @@ def main():
 
         if target:
             results.append({"site": name, "notices": target})
-            state[name] = site_seen | {n["id"] for n in target}
+            if not keywords_only:
+                state[name] = site_seen | {n["id"] for n in target}
 
-    if is_first and not send_all:
+    if is_first and not (send_all or keywords_only):
         log.info("첫 실행 완료 — 다음 실행부터 신규 공고를 알립니다.")
         save_state(state)
         return
 
-    save_state(state)
+    if not keywords_only:
+        save_state(state)
 
     if results:
-        send_teams_summary(webhook_url, results, send_all=send_all, keywords=keywords)
+        send_teams_summary(webhook_url, results, send_all=send_all,
+                           keywords=keywords, keywords_only=keywords_only)
     else:
         log.info("모든 사이트에 신규 공고 없음.")
 
