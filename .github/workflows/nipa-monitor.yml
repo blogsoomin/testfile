@@ -107,21 +107,6 @@ jobs:
                   "date": "td:nth-child(4)"
                 }
               },
-              {
-                "name": "산업통상자원부",
-                "url": "https://www.motie.go.kr/kor/article/ATCL2826a2625",
-                "base_url": "https://www.motie.go.kr",
-                "detail_url": "https://www.motie.go.kr/kor/article/ATCL2826a2625/{id}/view",
-                "page_param": "pageIndex",
-                "page_start": 1,
-                "max_pages": 5,
-                "selectors": {
-                  "item": "table tbody tr",
-                  "title": "td.tr a",
-                  "link_attr": "href",
-                  "date": "td[data-cell-header=\"공고일\"]"
-                }
-              }
             ]
           }
           with open("config.json", "w", encoding="utf-8") as f:
