@@ -423,6 +423,14 @@ def main():
                            keywords=keywords, keywords_only=keywords_only)
     else:
         log.info("모든 사이트에 신규 공고 없음.")
+        # normal 모드에서만 "없음" 알림 전송
+        if not send_all and not keywords_only:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M")
+            payload = {"text": f"오늘 새로 올라온 공고가 없어요. ({now})"}
+            try:
+                requests.post(webhook_url, json=payload, timeout=10)
+            except requests.RequestException as e:
+                log.error(f"Teams 알림 전송 실패: {e}")
 
 
 if __name__ == "__main__":
