@@ -156,7 +156,7 @@ def parse_notices(soup: BeautifulSoup, selectors: dict, base_url: str) -> list[d
 # ── Teams 알림 ─────────────────────────────────────────────────────────────────
 def _is_power_automate_url(url: str) -> bool:
     """워크플로(Power Automate) URL인지 판별"""
-    return "logic.azure.com" in url or "powerautomate.com" in url
+    return any(x in url for x in ["logic.azure.com", "powerautomate.com", "powerplatform.com"])
 
 
 def send_teams_notification(webhook_url: str, notices: list[dict]) -> bool:
