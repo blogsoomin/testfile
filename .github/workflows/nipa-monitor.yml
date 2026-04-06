@@ -55,9 +55,9 @@ jobs:
             },
             "selectors": {
               "item": "table tbody tr",
-              "title": "td.subject a, td.title a, td a.tit",
+              "title": "td.tl a",
               "link_attr": "href",
-              "date": "td.date, td.reg-date"
+              "date": "span.bco"
             },
             "max_retries": 3,
             "retry_delay": 5,
