@@ -195,12 +195,12 @@ def fetch_all_pages(site: dict, headers: dict, timeout: int, retries: int, delay
 
 
 def resolve_href(href: str, base_url: str, site_cfg: dict) -> str:
-    """javascript:contentsView('ID') 형태 링크를 실제 URL로 변환"""
+    """javascript:xxx('ID') 형태 링크를 실제 URL로 변환"""
     import re
     if href.startswith("javascript:"):
-        m = re.search(r"contentsView\(['\"]([^'\"]+)['\"]\)", href)
+        m = re.search(r"\w+\(['\"]([^'\"]+)['\"]\)", href)
         if m and site_cfg.get("detail_url"):
-            return site_cfg["detail_url"] + m.group(1)
+            return site_cfg["detail_url"].format(id=m.group(1))
         return ""
     if href and not href.startswith("http"):
         return urljoin(base_url, href)
