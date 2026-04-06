@@ -13,8 +13,9 @@ on:
         type: choice
         options:
           - normal          # 신규 공고만 알림 (기본)
-          - send_all        # 전체 공고 전송 (전체 목록 포함)
-          - keywords_only   # 전체 탐색 후 키워드 관련 공고만 전송
+          - send_all        # 전체 공고 전송 (상태 변경 없음)
+          - keywords_only   # 전체 탐색 후 키워드 관련 공고만 전송 (상태 변경 없음)
+          - reset           # 기준점 초기화 후 재설정 (normal이 안 올 때 사용)
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -50,6 +51,7 @@ jobs:
             "teams_webhook_url": os.environ["TEAMS_WEBHOOK_URL"],
             "send_all":      mode == "send_all",
             "keywords_only": mode == "keywords_only",
+            "reset":         mode == "reset",
             "keywords": ["AI", "AX", "물류", "휴머노이드", "Physical"],
             "headers": {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",

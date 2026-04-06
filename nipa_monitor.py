@@ -326,6 +326,7 @@ def main():
 
     send_all      = config.get("send_all", False)
     keywords_only = config.get("keywords_only", False)
+    reset         = config.get("reset", False)
     keywords      = config.get("keywords", [])
     state         = load_state()
     is_first      = len(state) == 0
@@ -348,7 +349,12 @@ def main():
         log.info(f"[{name}] 파싱된 공고 수: {len(all_notices)}")
         site_seen = state.get(name, set())
 
-        if send_all or keywords_only:
+        if reset:
+            # 기준점 초기화: 현재 공고를 seen으로 저장하고 종료
+            state[name] = {n["id"] for n in all_notices}
+            log.info(f"[{name}] 기준점 초기화 완료 ({len(all_notices)}건 저장)")
+            continue
+        elif send_all or keywords_only:
             target = all_notices
         elif is_first or not site_seen:
             state[name] = {n["id"] for n in all_notices}
@@ -359,15 +365,21 @@ def main():
 
         if target:
             results.append({"site": name, "notices": target})
-            if not keywords_only:
+            # send_all / keywords_only 는 테스트용 — 상태 변경 없음
+            if not send_all and not keywords_only:
                 state[name] = site_seen | {n["id"] for n in target}
+
+    if reset:
+        save_state(state)
+        log.info("기준점 초기화 완료 — 다음 normal 실행부터 신규 공고를 알립니다.")
+        return
 
     if is_first and not (send_all or keywords_only):
         log.info("첫 실행 완료 — 다음 실행부터 신규 공고를 알립니다.")
         save_state(state)
         return
 
-    if not keywords_only:
+    if not send_all and not keywords_only:
         save_state(state)
 
     if results:
