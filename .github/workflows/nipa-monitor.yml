@@ -4,7 +4,19 @@ on:
   schedule:
     # 평일 오전 9시 ~ 오후 6시, 30분마다 실행 (UTC 기준 +9시간 차이)
     - cron: '0,30 0-9 * * 1-5'
-  workflow_dispatch: # 수동 실행 버튼도 생성
+  workflow_dispatch:
+    inputs:
+      send_all:
+        description: '현재 공고 전체 전송 (체크하면 새것만이 아닌 전체를 Teams로 전송)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   check-notices:
@@ -28,12 +40,14 @@ jobs:
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           NOTICE_URL: ${{ secrets.NOTICE_URL }}
+          SEND_ALL: ${{ github.event.inputs.send_all || 'false' }}
         run: |
           python - <<'EOF'
           import json, os
           config = {
             "teams_webhook_url": os.environ["TEAMS_WEBHOOK_URL"],
             "notice_url": os.environ.get("NOTICE_URL", "https://www.nipa.kr/biz/noticeList.do"),
+            "send_all": os.environ.get("SEND_ALL", "false") == "true",
             "headers": {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
               "Accept-Language": "ko-KR,ko;q=0.9",

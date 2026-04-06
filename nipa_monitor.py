@@ -159,18 +159,18 @@ def _is_power_automate_url(url: str) -> bool:
     return any(x in url for x in ["logic.azure.com", "powerautomate.com", "powerplatform.com"])
 
 
-def send_teams_notification(webhook_url: str, notices: list[dict]) -> bool:
+def send_teams_notification(webhook_url: str, notices: list[dict], title_prefix: str = "신규") -> bool:
     """새 공고를 Teams에 전송 — 워크플로/레거시 커넥터 자동 구분"""
     if not notices:
         return True
 
     if _is_power_automate_url(webhook_url):
-        return _send_via_power_automate(webhook_url, notices)
+        return _send_via_power_automate(webhook_url, notices, title_prefix)
     else:
-        return _send_via_legacy_connector(webhook_url, notices)
+        return _send_via_legacy_connector(webhook_url, notices, title_prefix)
 
 
-def _send_via_power_automate(webhook_url: str, notices: list[dict]) -> bool:
+def _send_via_power_automate(webhook_url: str, notices: list[dict], title_prefix: str = "신규") -> bool:
     """Power Automate 워크플로 Webhook (최신 Teams)"""
     lines = []
     for n in notices:
@@ -181,7 +181,7 @@ def _send_via_power_automate(webhook_url: str, notices: list[dict]) -> bool:
             lines.append(f"• {date_str}{n['title']}")
 
     body = (
-        f"<h3>📢 NIPA 사업공고 신규 {len(notices)}건</h3>"
+        f"<h3>📢 NIPA 사업공고 {title_prefix} {len(notices)}건</h3>"
         f"<p>{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>"
         + "<br>".join(lines)
         + f"<br><br><a href='https://www.nipa.kr/'>NIPA 사업공고 바로가기 →</a>"
@@ -199,7 +199,7 @@ def _send_via_power_automate(webhook_url: str, notices: list[dict]) -> bool:
         return False
 
 
-def _send_via_legacy_connector(webhook_url: str, notices: list[dict]) -> bool:
+def _send_via_legacy_connector(webhook_url: str, notices: list[dict], title_prefix: str = "신규") -> bool:
     """레거시 Incoming Webhook 커넥터 (구버전 Teams)"""
     facts = [
         {
@@ -224,7 +224,7 @@ def _send_via_legacy_connector(webhook_url: str, notices: list[dict]) -> bool:
                     "body": [
                         {
                             "type": "TextBlock",
-                            "text": f"📢 NIPA 사업공고 신규 {len(notices)}건",
+                            "text": f"📢 NIPA 사업공고 {title_prefix} {len(notices)}건",
                             "weight": "Bolder",
                             "size": "Large",
                             "color": "Accent",
@@ -297,8 +297,14 @@ def main():
 
     log.info(f"파싱된 공고 수: {len(notices)}")
 
+    # 전체 전송 모드 (수동 실행 시 선택 가능)
+    if config.get("send_all"):
+        log.info("전체 전송 모드 — 현재 목록 전체를 Teams로 전송합니다.")
+        send_teams_notification(webhook_url, notices, title_prefix="현재 공고 전체")
+        save_state({n["id"] for n in notices})
+        return
+
     if is_first_run:
-        # 첫 실행: 현재 목록을 기준점으로 저장 (알림 없이)
         log.info("첫 실행 — 현재 공고를 기준점으로 저장합니다. 다음 실행부터 새 공고를 알립니다.")
         save_state({n["id"] for n in notices})
         return
