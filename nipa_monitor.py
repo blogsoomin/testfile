@@ -171,22 +171,67 @@ def send_teams_notification(webhook_url: str, notices: list[dict], title_prefix:
 
 
 def _send_via_power_automate(webhook_url: str, notices: list[dict], title_prefix: str = "신규") -> bool:
-    """Power Automate 워크플로 Webhook (최신 Teams)"""
-    lines = []
+    """Power Automate 워크플로 Webhook — Adaptive Card 전체를 payload로 전송"""
+
+    # 공고별 행: 날짜 | 클릭 가능한 제목
+    rows = []
     for n in notices:
-        date_str = f"[{n['date']}] " if n["date"] else ""
-        link_text = f"{n['title']} ({n['link']})" if n["link"] else n["title"]
-        lines.append(f"• {date_str}{link_text}")
+        title_md = f"[{n['title']}]({n['link']})" if n["link"] else n["title"]
+        rows.append({
+            "type": "ColumnSet",
+            "separator": True,
+            "columns": [
+                {
+                    "type": "Column",
+                    "width": "auto",
+                    "items": [{
+                        "type": "TextBlock",
+                        "text": n["date"] or "-",
+                        "isSubtle": True,
+                        "size": "Small",
+                        "wrap": False,
+                    }],
+                },
+                {
+                    "type": "Column",
+                    "width": "stretch",
+                    "items": [{
+                        "type": "TextBlock",
+                        "text": title_md,
+                        "wrap": True,
+                        "size": "Small",
+                    }],
+                },
+            ],
+        })
 
-    text = (
-        f"📢 NIPA 사업공고 {title_prefix} {len(notices)}건\n"
-        f"{datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
-        + "\n".join(lines)
-        + "\n\nhttps://www.nipa.kr/"
-    )
-
-    # Power Automate "채널에 웹후크 알림 보내기" 템플릿 형식
-    payload = {"text": text}
+    payload = {
+        "type": "AdaptiveCard",
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "version": "1.4",
+        "body": [
+            {
+                "type": "TextBlock",
+                "text": f"📢 NIPA 사업공고 {title_prefix} {len(notices)}건",
+                "weight": "Bolder",
+                "size": "Large",
+                "color": "Accent",
+            },
+            {
+                "type": "TextBlock",
+                "text": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "isSubtle": True,
+                "size": "Small",
+                "spacing": "None",
+            },
+            *rows,
+        ],
+        "actions": [{
+            "type": "Action.OpenUrl",
+            "title": "NIPA 사업공고 바로가기",
+            "url": "https://www.nipa.kr/",
+        }],
+    }
 
     try:
         resp = requests.post(webhook_url, json=payload, timeout=10)
