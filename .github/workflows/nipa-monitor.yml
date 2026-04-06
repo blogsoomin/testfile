@@ -40,6 +40,7 @@ jobs:
       - name: config.json 생성
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          NIPA_URL: ${{ secrets.NOTICE_URL }}
           MODE: ${{ github.event.inputs.mode || 'normal' }}
         run: |
           python - <<'EOF'
@@ -60,7 +61,7 @@ jobs:
             "sites": [
               {
                 "name": "NIPA",
-                "url": "https://www.nipa.kr/biz/noticeList.do",
+                "url": os.environ.get("NIPA_URL", "https://www.nipa.kr/biz/noticeList.do"),
                 "page_param": "pageIndex",
                 "page_start": 1,
                 "max_pages": 5,
