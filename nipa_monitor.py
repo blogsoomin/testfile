@@ -56,12 +56,12 @@ DEFAULT_CONFIG = {
     "selectors": {
         # 공고 항목 하나씩을 감싸는 요소
         "item": "table tbody tr",
-        # 공고 제목 텍스트를 담은 요소 (item 기준 상대 선택자)
-        "title": "td.subject a, td.title a, td a.tit",
-        # 공고 링크 href (title 요소의 속성)
+        # 공고 제목 링크 (td.tl 안의 a 태그)
+        "title": "td.tl a",
+        # 공고 링크 href
         "link_attr": "href",
-        # 등록일 요소
-        "date": "td.date, td.reg-date",
+        # 등록일 요소 (날짜 확인 후 업데이트 예정)
+        "date": "td.date, td.reg-date, td:nth-child(5)",
     },
 
     # 요청 실패 시 재시도 횟수
