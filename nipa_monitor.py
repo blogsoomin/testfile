@@ -154,12 +154,53 @@ def parse_notices(soup: BeautifulSoup, selectors: dict, base_url: str) -> list[d
 
 
 # ── Teams 알림 ─────────────────────────────────────────────────────────────────
+def _is_power_automate_url(url: str) -> bool:
+    """워크플로(Power Automate) URL인지 판별"""
+    return "logic.azure.com" in url or "powerautomate.com" in url
+
+
 def send_teams_notification(webhook_url: str, notices: list[dict]) -> bool:
-    """새 공고를 Teams Adaptive Card로 전송"""
+    """새 공고를 Teams에 전송 — 워크플로/레거시 커넥터 자동 구분"""
     if not notices:
         return True
 
-    # 여러 건을 하나의 카드에 묶어서 발송
+    if _is_power_automate_url(webhook_url):
+        return _send_via_power_automate(webhook_url, notices)
+    else:
+        return _send_via_legacy_connector(webhook_url, notices)
+
+
+def _send_via_power_automate(webhook_url: str, notices: list[dict]) -> bool:
+    """Power Automate 워크플로 Webhook (최신 Teams)"""
+    lines = []
+    for n in notices:
+        date_str = f"[{n['date']}] " if n["date"] else ""
+        if n["link"]:
+            lines.append(f"• {date_str}<a href='{n['link']}'>{n['title']}</a>")
+        else:
+            lines.append(f"• {date_str}{n['title']}")
+
+    body = (
+        f"<h3>📢 NIPA 사업공고 신규 {len(notices)}건</h3>"
+        f"<p>{datetime.now().strftime('%Y-%m-%d %H:%M')}</p>"
+        + "<br>".join(lines)
+        + f"<br><br><a href='https://www.nipa.kr/'>NIPA 사업공고 바로가기 →</a>"
+    )
+
+    payload = {"text": body}
+
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        resp.raise_for_status()
+        log.info(f"Teams 알림 전송 완료 (Power Automate, {len(notices)}건)")
+        return True
+    except requests.RequestException as e:
+        log.error(f"Teams 알림 전송 실패: {e}")
+        return False
+
+
+def _send_via_legacy_connector(webhook_url: str, notices: list[dict]) -> bool:
+    """레거시 Incoming Webhook 커넥터 (구버전 Teams)"""
     facts = [
         {
             "type": "FactSet",
@@ -214,7 +255,7 @@ def send_teams_notification(webhook_url: str, notices: list[dict]) -> bool:
     try:
         resp = requests.post(webhook_url, json=payload, timeout=10)
         resp.raise_for_status()
-        log.info(f"Teams 알림 전송 완료 ({len(notices)}건)")
+        log.info(f"Teams 알림 전송 완료 (레거시 커넥터, {len(notices)}건)")
         return True
     except requests.RequestException as e:
         log.error(f"Teams 알림 전송 실패: {e}")
