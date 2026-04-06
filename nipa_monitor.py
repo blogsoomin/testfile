@@ -128,7 +128,21 @@ def fetch_page(url: str, headers: dict, timeout: int, retries: int, delay: int) 
     return None
 
 
-def parse_notices(soup: BeautifulSoup, selectors: dict, base_url: str) -> list[dict]:
+def resolve_href(href: str, base_url: str, site_cfg: dict) -> str:
+    """javascript:contentsView('ID') 형태 링크를 실제 URL로 변환"""
+    import re
+    if href.startswith("javascript:"):
+        m = re.search(r"contentsView\(['\"]([^'\"]+)['\"]\)", href)
+        if m and site_cfg.get("detail_url"):
+            return site_cfg["detail_url"] + m.group(1)
+        return ""
+    if href and not href.startswith("http"):
+        return urljoin(base_url, href)
+    return href
+
+
+def parse_notices(soup: BeautifulSoup, selectors: dict, base_url: str,
+                  site_cfg: dict | None = None) -> list[dict]:
     notices = []
     for item in soup.select(selectors["item"]):
         title_el = item.select_one(selectors["title"])
@@ -137,10 +151,9 @@ def parse_notices(soup: BeautifulSoup, selectors: dict, base_url: str) -> list[d
         title = title_el.get_text(strip=True)
         if not title:
             continue
-        href = title_el.get(selectors.get("link_attr", "href"), "")
-        if href and not href.startswith("http"):
-            href = urljoin(base_url, href)
-        date_el = item.select_one(selectors.get("date", ""))
+        raw_href = title_el.get(selectors.get("link_attr", "href"), "")
+        href = resolve_href(raw_href, base_url, site_cfg or {})
+        date_el = item.select_one(selectors.get("date", "")) if selectors.get("date") else None
         date = date_el.get_text(strip=True) if date_el else ""
         notices.append({"id": make_id(title, href), "title": title, "link": href, "date": date})
     return notices
@@ -260,7 +273,7 @@ def main():
             log.error(f"[{name}] 페이지 크롤링 실패")
             continue
 
-        all_notices = parse_notices(soup, site["selectors"], site["url"])
+        all_notices = parse_notices(soup, site["selectors"], site["url"], site_cfg=site)
         if not all_notices:
             log.warning(f"[{name}] 공고 파싱 실패 — selectors 확인 필요")
             continue
