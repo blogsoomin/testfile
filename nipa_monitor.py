@@ -61,7 +61,7 @@ DEFAULT_CONFIG = {
         # 공고 링크 href
         "link_attr": "href",
         # 등록일 요소 (날짜 확인 후 업데이트 예정)
-        "date": "td.date, td.reg-date, td:nth-child(5)",
+        "date": "span.bco",
     },
 
     # 요청 실패 시 재시도 횟수
