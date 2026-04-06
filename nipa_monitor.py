@@ -235,12 +235,47 @@ def matches_keywords(title: str, keywords: list[str]) -> bool:
     return any(kw.lower() in title.lower() for kw in keywords)
 
 
+def extract_end_date(date_str: str) -> datetime | None:
+    """
+    다양한 형식에서 마감일(종료일) 추출
+    - '2026-03-27~2026-04-28'
+    - '2026-04-03 12:00 ~ 2026-04-21 11:00'
+    - '[신청기간 : 2026-04-03 ~ 2026-04-21]'
+    → 마지막에 등장하는 날짜를 마감일로 간주
+    """
+    import re
+    dates = re.findall(r"(\d{4}-\d{2}-\d{2})", date_str)
+    if len(dates) >= 2:
+        # 기간이 있는 경우 마지막 날짜가 마감일
+        try:
+            return datetime.strptime(dates[-1], "%Y-%m-%d")
+        except ValueError:
+            pass
+    return None  # 단일 날짜(등록일)이면 만료 여부 판단 불가 → 유지
+
+
+def is_expired(notice: dict) -> bool:
+    """마감일이 오늘 이전이면 True"""
+    end = extract_end_date(notice.get("date", ""))
+    if end is None:
+        return False
+    return end.date() < datetime.now().date()
+
+
 def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = False,
                        keywords: list[str] | None = None, keywords_only: bool = False) -> bool:
     """
     results: [{"site": "NIPA", "notices": [...]}, ...]
     keywords_only=True → 키워드 매칭 공고만 전송, 전체 목록 생략
     """
+    # 만료된 공고 제거 (send_all/keywords_only 포함)
+    for r in results:
+        before = len(r["notices"])
+        r["notices"] = [n for n in r["notices"] if not is_expired(n)]
+        filtered = before - len(r["notices"])
+        if filtered:
+            log.info(f"[{r['site']}] 마감 지난 공고 {filtered}건 제외")
+
     total = sum(len(r["notices"]) for r in results)
     if total == 0:
         log.info("전송할 공고 없음.")
