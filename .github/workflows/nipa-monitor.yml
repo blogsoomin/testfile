@@ -1,13 +1,13 @@
-name: NIPA 사업공고 모니터링
+name: 사업공고 모니터링
 
 on:
   schedule:
-    # 평일 오전 9시 ~ 오후 6시, 30분마다 실행 (UTC 기준 +9시간 차이)
-    - cron: '0,30 0-9 * * 1-5'
+    # 매일 오전 9시 (KST) = UTC 0시
+    - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       send_all:
-        description: '현재 공고 전체 전송 (체크하면 새것만이 아닌 전체를 Teams로 전송)'
+        description: '현재 공고 전체 전송 (테스트용 — true 선택 시 전체 전송)'
         required: false
         default: 'false'
         type: choice
@@ -39,29 +39,43 @@ jobs:
       - name: config.json 생성
         env:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-          NOTICE_URL: ${{ secrets.NOTICE_URL }}
           SEND_ALL: ${{ github.event.inputs.send_all || 'false' }}
         run: |
           python - <<'EOF'
           import json, os
           config = {
             "teams_webhook_url": os.environ["TEAMS_WEBHOOK_URL"],
-            "notice_url": os.environ.get("NOTICE_URL", "https://www.nipa.kr/biz/noticeList.do"),
             "send_all": os.environ.get("SEND_ALL", "false") == "true",
+            "keywords": ["AI", "AX", "물류", "휴머노이드", "Physical"],
             "headers": {
               "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36",
               "Accept-Language": "ko-KR,ko;q=0.9",
-              "Referer": "https://www.nipa.kr/"
-            },
-            "selectors": {
-              "item": "table tbody tr",
-              "title": "td.tl a",
-              "link_attr": "href",
-              "date": "span.bco"
             },
             "max_retries": 3,
             "retry_delay": 5,
-            "timeout": 15
+            "timeout": 15,
+            "sites": [
+              {
+                "name": "NIPA",
+                "url": "https://www.nipa.kr/biz/noticeList.do",
+                "selectors": {
+                  "item": "table tbody tr",
+                  "title": "td.tl a",
+                  "link_attr": "href",
+                  "date": "span.bco"
+                }
+              },
+              {
+                "name": "KIAT",
+                "url": "https://www.kiat.or.kr/front/board/boardContentsListPage.do?board_id=90&MenuId=b159c9dac684471b87256f1e25404f5e",
+                "selectors": {
+                  "item": "table tbody tr",
+                  "title": "td.tit a, td.subject a, td.title a",
+                  "link_attr": "href",
+                  "date": "td.date, td:last-child"
+                }
+              }
+            ]
           }
           with open("config.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
@@ -72,9 +86,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: seen_posts.json
-          key: nipa-seen-posts-${{ github.run_id }}
+          key: notice-seen-posts-${{ github.run_id }}
           restore-keys: |
-            nipa-seen-posts-
+            notice-seen-posts-
 
       - name: 사업공고 확인 및 Teams 알림
         run: python nipa_monitor.py

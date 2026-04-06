@@ -151,9 +151,15 @@ def _is_power_automate_url(url: str) -> bool:
     return any(x in url for x in ["logic.azure.com", "powerautomate.com", "powerplatform.com"])
 
 
-def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = False) -> bool:
+def matches_keywords(title: str, keywords: list[str]) -> bool:
+    return any(kw.lower() in title.lower() for kw in keywords)
+
+
+def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = False,
+                       keywords: list[str] | None = None) -> bool:
     """
-    results: [{"site": "NIPA", "notices": [...], "is_new": True/False}, ...]
+    results: [{"site": "NIPA", "notices": [...]}, ...]
+    키워드 매칭 공고를 최상단에 표시
     """
     total = sum(len(r["notices"]) for r in results)
     if total == 0:
@@ -162,8 +168,28 @@ def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = F
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     prefix = "현재 공고 전체" if send_all else "신규 공고"
+    keywords = keywords or []
 
     lines = [f"({total}건) {now}\n"]
+
+    # ── 키워드 매칭 공고 최상단 표시 ─────────────────────────────────────────
+    if keywords:
+        matched = [
+            (r["site"], n)
+            for r in results
+            for n in r["notices"]
+            if matches_keywords(n["title"], keywords)
+        ]
+        if matched:
+            kw_str = ", ".join(keywords)
+            lines.append(f"🔥 관련 공고 ({kw_str}) — {len(matched)}건")
+            for i, (site, n) in enumerate(matched, 1):
+                date_str = n["date"] or "-"
+                lines.append(f"  {i}. [{site}] [{date_str}] {n['title']}")
+            lines.append("")
+
+    # ── 사이트별 전체 목록 ────────────────────────────────────────────────────
+    lines.append("📋 전체 목록")
     for r in results:
         if not r["notices"]:
             continue
@@ -171,7 +197,7 @@ def send_teams_summary(webhook_url: str, results: list[dict], send_all: bool = F
         for i, n in enumerate(r["notices"], 1):
             date_str = n["date"] or "-"
             lines.append(f"  {i}. [{date_str}] {n['title']}")
-        lines.append("")  # 사이트 간 빈 줄
+        lines.append("")
 
     payload = {"text": "\n".join(lines).strip()}
 
@@ -215,6 +241,7 @@ def main():
         return
 
     send_all   = config.get("send_all", False)
+    keywords   = config.get("keywords", [])
     state      = load_state()
     is_first   = len(state) == 0
     headers    = config["headers"]
@@ -263,7 +290,7 @@ def main():
     save_state(state)
 
     if results:
-        send_teams_summary(webhook_url, results, send_all=send_all)
+        send_teams_summary(webhook_url, results, send_all=send_all, keywords=keywords)
     else:
         log.info("모든 사이트에 신규 공고 없음.")
 
