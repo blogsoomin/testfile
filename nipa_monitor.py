@@ -218,7 +218,8 @@ def parse_notices(soup: BeautifulSoup, selectors: dict, base_url: str,
         if not title:
             continue
         raw_href = title_el.get(selectors.get("link_attr", "href"), "")
-        href = resolve_href(raw_href, base_url, site_cfg or {})
+        link_base = (site_cfg or {}).get("base_url", base_url)
+        href = resolve_href(raw_href, link_base, site_cfg or {})
         date_el = item.select_one(selectors.get("date", "")) if selectors.get("date") else None
         date = date_el.get_text(strip=True) if date_el else ""
         notices.append({"id": make_id(title, href), "title": title, "link": href, "date": date})

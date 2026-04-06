@@ -92,6 +92,20 @@ jobs:
                   "link_attr": "href",
                   "date": "td.td_app_term"
                 }
+              },
+              {
+                "name": "KAIA",
+                "url": "https://www.kaia.re.kr/portal/bbs/list/B0000029.do?menuNo=200110",
+                "base_url": "https://www.kaia.re.kr",
+                "page_param": "pageIndex",
+                "page_start": 1,
+                "max_pages": 5,
+                "selectors": {
+                  "item": "table tbody tr",
+                  "title": "td.t_subject a",
+                  "link_attr": "href",
+                  "date": "td:nth-child(4)"
+                }
               }
             ]
           }
